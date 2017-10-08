@@ -1,5 +1,6 @@
 from __future__ import absolute_import, unicode_literals
 
+import getpass
 import re
 from time import sleep
 
@@ -9,7 +10,6 @@ from datetime import datetime
 import requests
 from lxml import html
 
-import sys
 import urllib3
 
 urllib3.disable_warnings()
@@ -17,11 +17,11 @@ urllib3.disable_warnings()
 base_url = 'https://ico.info'
 headers = {'user-agent': 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 '
                          '(KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36'}
-user_email = sys.argv[1]
-user_password = sys.argv[2]
-project_num = sys.argv[3]
-token = sys.argv[4]
-token_amount = sys.argv[5]
+user_email = input('User login email address: ')
+user_password = getpass.getpass('Password: ')
+project_num = input('ICO project number: ')
+token = input('Token used in ICO application: ')
+token_amount = input('Token amount: ')
 
 session = requests.session()
 
@@ -81,7 +81,7 @@ while True:
     delta_in_seconds = delta.total_seconds()
 
     if delta_in_seconds > 3 * 60:
-        print('ICO will start in {}'.format(delta), end='\r')
+        print('ICO application will start in {}'.format(delta), end='\r')
         sleep(1)
         continue
 
@@ -90,9 +90,9 @@ while True:
     else:
         print('ICO already started')
 
-    print('Begin ICO procedure. Will move forward once a previous step is completed successfully '
-          'until ICO completed successfully')
-    print('Supporting project with token: {}...'.format(token))
+    print('Begin ICO application. Will move forward once a previous step is completed successfully '
+          'until ICO completed successfully or error occurred')
+    print('Applying project with token: {}...'.format(token))
     while True:
         project_response = session.get('{}/projects/{}'.format(base_url, project_num), headers=headers,
                                        verify=False)
@@ -111,7 +111,7 @@ while True:
                 support_reason = support_node.text
                 if support_href == '#':
                     if support_reason == '限额已满':
-                        raise RuntimeError('ICO has been closed on token: {}'.format(token))
+                        raise RuntimeError('ICO application has been closed on token: {}'.format(token))
                 else:
                     ico_started = True
 
@@ -119,7 +119,7 @@ while True:
                 break
 
         if supported_token_found is False:
-            raise RuntimeError('Token: {} is not supported in this ICO'.format(token))
+            raise RuntimeError('Token: {} is not supported in this ICO application'.format(token))
 
         if ico_started is False:
             sleep(0.1)
@@ -146,19 +146,19 @@ while True:
     verification_tip = html.fromstring(
         confirm_response.text).xpath('//input[@name="math_challenage_ans"]')[0].attrib['placeholder']
     print('{}{}'.format(verification, verification_tip))
-    answer = input('Please answer the above question for final submitting: ')
+    answer = input('Please answer the above question for the final submitting: ')
     print('Submitting ICO application, project: {}, token: {}, amount: {}...'.format(
         project_name, token, token_amount))
     submit_authenticity_token = html.fromstring(
         confirm_response.text).xpath('//meta[@name="csrf-token"]')[0].attrib['content']
+    submit_data = {
+        'utf8': '✓',
+        'authenticity_token': submit_authenticity_token,
+        'order[total_price]': token_amount,
+        'math_challenage_ans': answer,
+        'button': ''
+    }
     while True:
-        submit_data = {
-            'utf8': '✓',
-            'authenticity_token': submit_authenticity_token,
-            'order[total_price]': token_amount,
-            'math_challenage_ans': answer,
-            'button': ''
-        }
         submit_response = session.post(confirm_response.url.rstrip('/new'), headers=headers, data=submit_data,
                                        verify=False)
 
@@ -167,9 +167,10 @@ while True:
                 submit_response.text).xpath('//button[@data-dismiss="alert"]')
 
             if warning:
-                print('Failed to submit ICO application. Error: {}'.format(warning[0].tail.strip()))
-                answer = input('Confirm your answer: ')
-                continue
+                print('Server respond status code 200. But failed to submit ICO application. Error: {}'
+                      .format(warning[0].tail.strip()))
+                input('Press any key to exit...')
+                exit(1)
 
             print('Completed. Moving forward...')
             break
@@ -178,3 +179,4 @@ while True:
     break
 
 session.close()
+exit(0)
